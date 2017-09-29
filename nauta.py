@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from pprint import pprint
+from textwrap import dedent
 
 import subprocess
 import requests
@@ -24,12 +25,6 @@ CARDS_DB = os.path.join(CONFIG_DIR, "cards")
 ATTR_UUID_FILE = os.path.join(CONFIG_DIR, "attribute_uuid")
 LOGOUT_URL_FILE = os.path.join(CONFIG_DIR, "logout_url")
 logfile = open(os.path.join(CONFIG_DIR, "connections.log"), "a")
-
-#logging.basicConfig() # you need to initialize logging, otherwise you will not see anything from requests
-#logging.getLogger().setLevel(logging.DEBUG)
-#requests_log = logging.getLogger("requests.packages.urllib3")
-#requests_log.setLevel(logging.DEBUG)
-#requests_log.propagate = True
 
 def log(*args, **kwargs):
     date = subprocess.check_output("date").decode().strip()
@@ -75,7 +70,7 @@ def select_card():
         return None, None
     return cards[0]['username'], cards[0]['password']
 
-def up():
+def up(args):
     session = requests.Session()
     r = session.get("http://google.com")
 
@@ -208,7 +203,7 @@ def human_secs(secs):
         secs % 60,
     )
 
-def down():
+def down(args):
     try:
         logout_url = open(LOGOUT_URL_FILE).read().strip()
     except FileNotFoundError:
@@ -242,36 +237,6 @@ def time_left(username):
         time_left = card_info.get('time_left', '-')
         return time_left
 
-def cards(args):
-    with dbm.open(CARDS_DB, "c") as cards_db:
-        for card in cards_db.keys():
-            card = card.decode()
-            card_info = json.loads(cards_db[card].decode())
-            password = card_info['password']
-            password = "*" * (len(password) - 4) + password[-4:]
-            print("{}\t{}\t{}".format(card, password, time_left(card)))
-
-def newcard(username, password):
-    with dbm.open(CARDS_DB, "c") as cards_db:
-        cards_db[username] = json.dumps({
-            'password': password,
-        })
-
-def askforcard():
-    username = input("Username: ")
-    password = input("Password: ")
-    return username, password
-
-def purge_cards():
-    cards_to_purge = []
-    with dbm.open(CARDS_DB, "c") as cards_db:
-        for card in cards_db.keys():
-            info = json.loads(cards_db[card].decode())
-            tl = parse_time(info.get('time_left'))
-            if tl == 0:
-                cards_to_purge.append(card)
-    delete_cards(cards_to_purge)
-
 def delete_cards(cards):
     with dbm.open(CARDS_DB, "c") as cards_db:
         if len(cards) > 0:
@@ -288,12 +253,55 @@ def delete_cards(cards):
                 if reply.lower().startswith("n"):
                     break
 
-def main(args):
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers()
+def cards(args):
+    with dbm.open(CARDS_DB, "c") as cards_db:
+        for card in cards_db.keys():
+            card = card.decode()
+            card_info = json.loads(cards_db[card].decode())
+            password = card_info['password']
+            if not args.v:
+                password = "*" * (len(password) - 4) + password[-4:]
+            print("{}\t{}\t{}".format(card, password, time_left(card)))
 
-    status_parser = subparsers.add_parser('status')
-    status_parser.set_defaults(func=status)
+def cards_add(args):
+    if not args.username:
+        username = input("Username: ")
+    password = input("Password: ")
+    with dbm.open(CARDS_DB, "c") as cards_db:
+        cards_db[username] = json.dumps({
+            'password': password,
+        })
+
+def cards_clean(args):
+    cards_to_purge = []
+    with dbm.open(CARDS_DB, "c") as cards_db:
+        for card in cards_db.keys():
+            info = json.loads(cards_db[card].decode())
+            tl = parse_time(info.get('time_left'))
+            if tl == 0:
+                cards_to_purge.append(card)
+    delete_cards(cards_to_purge)
+
+def cards_rm(args):
+    delete_cards(args.cards)
+
+def main(args):
+    parser = argparse.ArgumentParser(
+        epilog=dedent("""\
+        Subcommands:
+
+          up
+          down
+          cards
+          cards add [username]
+          cards clean
+          cards rm username [username ...]
+
+        Use -h after a subcommand for more info
+        """),
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    subparsers = parser.add_subparsers()
 
     cards_parser = subparsers.add_parser('cards')
     cards_parser.set_defaults(func=cards)
@@ -301,17 +309,17 @@ def main(args):
         action="store_true",
         help="show full passwords"
     )
-    cards_subparser = cards_parser.add_subparsers()
-    cards_add_parser = cards_subparser.add_parser('add')
+    cards_subparsers = cards_parser.add_subparsers()
+    cards_add_parser = cards_subparsers.add_parser('add')
     cards_add_parser.set_defaults(func=cards_add)
-    cards_add_parser.add_argument('card', nargs="?")
+    cards_add_parser.add_argument('username', nargs="?")
 
-    cards_clean_parser = cards_subparser.add_parser('clean')
+    cards_clean_parser = cards_subparsers.add_parser('clean')
     cards_clean_parser.set_defaults(func=cards_clean)
 
-    cards_rm_parser = cards_subparser.add_parser('rm')
+    cards_rm_parser = cards_subparsers.add_parser('rm')
     cards_rm_parser.set_defaults(func=cards_rm)
-    cards_rm_parser.add_argument('card')
+    cards_rm_parser.add_argument('usernames', nargs="+")
 
     up_parser = subparsers.add_parser('up')
     up_parser.set_defaults(func=up)
@@ -320,28 +328,10 @@ def main(args):
     down_parser.set_defaults(func=down)
 
     args = parser.parse_args()
-    args.func(args)
-
-    if len(args) == 0:
-        args = ["status"]
-
-    if args[0] == "up":
-        up()
-
-    if args[0] == "down":
-        down()
-
-    if args[0] == "cards":
-        if len(args) > 1:
-            if args[1] in ("add", "new"):
-                newcard(*askforcard())
-            if args[1] == "clean":
-                purge_cards()
-            if args[1] == "rm":
-                delete_cards(args[2:])
-        else:
-            cards()
-            select_card()
+    if 'func' in args:
+        args.func(args)
+    else:
+        parser.print_help()
 
 if __name__ == "__main__":
     main(sys.argv[1:])
