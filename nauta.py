@@ -216,19 +216,36 @@ def down(args):
     if 'SUCCESS' in r.text:
         os.remove(LOGOUT_URL_FILE)
 
+def fetch_expire_date(username, password):
+    session = requests.Session()
+    r = session.get("https://secure.etecsa.net:8443/")
+    soup = bs4.BeautifulSoup(r.text, 'html.parser')
 
-def usertime(username):
+    form = get_inputs(soup)
+    action = "https://secure.etecsa.net:8443/EtecsaQueryServlet"
+    form['username'] = username
+    form['password'] = password
+    r = session.post(action, form)
+    soup = bs4.BeautifulSoup(r.text, 'html.parser')
+    exp_text = soup.find(string=re.compile("expiración"))\
+                   .parent.find_next_sibling('td')\
+                   .text.strip()
+    exp_text = exp_text.replace('\\', '')
+    return exp_text
+
+def fetch_usertime(username):
     session = requests.Session()
     r = session.get("https://secure.etecsa.net:8443/EtecsaQueryServlet?op=getLeftTime&op1={}".format(username))
     return r.text
 
-def time_left(username):
+def time_left(username, fresh=False):
     now = time.time()
     with dbm.open(CARDS_DB, "c") as cards_db:
         card_info = json.loads(cards_db[username].decode())
         last_update = card_info.get('last_update', 0)
-        if now - last_update > 60:
-            time_left = usertime(username)
+        password = card_info['password']
+        if (now - last_update > 60) or fresh:
+            time_left = fetch_usertime(username)
             last_update = time.time()
             if re.match(r'[0-9:]+', time_left):
                 card_info['time_left'] = time_left
@@ -236,6 +253,21 @@ def time_left(username):
                 cards_db[username] = json.dumps(card_info)
         time_left = card_info.get('time_left', '-')
         return time_left
+
+def expire_date(username, fresh=False):
+    # expire date computation won't depend on last_update
+    # because the expire date will change very infrequently
+    # in the case of rechargeable accounts and it will
+    # never change in the case of non-rechargeable cards
+    with dbm.open(CARDS_DB, "c") as cards_db:
+        card_info = json.loads(cards_db[username].decode())
+        if (not 'expire_date' in card_info) or fresh:
+            password = card_info['password']
+            exp_date = fetch_expire_date(username, password)
+            card_info['expire_date'] = exp_date
+            cards_db[username] = json.dumps(card_info)
+        exp_date = card_info['expire_date']
+        return exp_date
 
 def delete_cards(cards):
     with dbm.open(CARDS_DB, "c") as cards_db:
@@ -261,7 +293,12 @@ def cards(args):
             password = card_info['password']
             if not args.v:
                 password = "*" * (len(password) - 4) + password[-4:]
-            print("{}\t{}\t{}".format(card, password, time_left(card)))
+            print("{}\t{}\t{}\t(expires {})".format(
+                card,
+                password,
+                time_left(card, args.fresh),
+                expire_date(card, args.fresh)
+            ))
 
 def cards_add(args):
     if not args.username:
@@ -285,6 +322,43 @@ def cards_clean(args):
 def cards_rm(args):
     delete_cards(args.cards)
 
+def cards_info(args):
+    username = args.username
+    with dbm.open(CARDS_DB, "c") as cards_db:
+        card_info = json.loads(cards_db[username].decode())
+        password = card_info['password']
+
+    session = requests.Session()
+    r = session.get("https://secure.etecsa.net:8443/")
+    soup = bs4.BeautifulSoup(r.text, 'html.parser')
+
+    form = get_inputs(soup)
+    action = "https://secure.etecsa.net:8443/EtecsaQueryServlet"
+    form['username'] = username
+    form['password'] = password
+    r = session.post(action, form)
+    soup = bs4.BeautifulSoup(r.text, 'html.parser')
+
+    print("Información")
+    print("-----------")
+    table = soup.find('table', id='sessioninfo')
+    for tr in table.find_all('tr'):
+        key, val = tr.find_all('td')
+        key = key.text.strip()
+        val = val.text.strip().replace('\\', '')
+        print(key, val)
+
+    print()
+    print("Sesiones")
+    print("--------")
+    table = soup.find('table', id='sesiontraza')
+    for tr in table.find_all('tr'):
+        tds = tr.find_all('td')
+        if len(tds) > 0: # avoid the empty line on the ths row
+            for cell in tds:
+                print(cell.text.strip(), end="\t")
+            print()
+
 def main(args):
     parser = argparse.ArgumentParser(
         epilog=dedent("""\
@@ -292,10 +366,11 @@ def main(args):
 
           up
           down
-          cards
+          cards [-v] [-f]
           cards add [username]
           cards clean
           cards rm username [username ...]
+          cards info username
 
         Use -h after a subcommand for more info
         """),
@@ -309,6 +384,10 @@ def main(args):
         action="store_true",
         help="show full passwords"
     )
+    cards_parser.add_argument("-f", "--fresh",
+        action="store_true",
+        help="force a fresh request of card time"
+    )
     cards_subparsers = cards_parser.add_subparsers()
     cards_add_parser = cards_subparsers.add_parser('add')
     cards_add_parser.set_defaults(func=cards_add)
@@ -320,6 +399,10 @@ def main(args):
     cards_rm_parser = cards_subparsers.add_parser('rm')
     cards_rm_parser.set_defaults(func=cards_rm)
     cards_rm_parser.add_argument('usernames', nargs="+")
+
+    cards_info_parser = cards_subparsers.add_parser('info')
+    cards_info_parser.set_defaults(func=cards_info)
+    cards_info_parser.add_argument('username')
 
     up_parser = subparsers.add_parser('up')
     up_parser.set_defaults(func=up)
