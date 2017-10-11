@@ -241,9 +241,10 @@ def fetch_expire_date(username, password):
     form['password'] = password
     r = session.post(action, form)
     soup = bs4.BeautifulSoup(r.text, 'html.parser')
-    exp_text = soup.find(string=re.compile("expiración"))\
-                   .parent.find_next_sibling('td')\
-                   .text.strip()
+    exp_node = soup.find(string=re.compile("expiración"))
+    if not exp_node:
+        return "**invalid credentials**"
+    exp_text = exp_node.parent.find_next_sibling('td').text.strip()
     exp_text = exp_text.replace('\\', '')
     return exp_text
 
