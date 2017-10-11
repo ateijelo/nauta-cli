@@ -55,6 +55,13 @@ def parse_time(t):
     except:
         return 0
 
+def get_password(username):
+    with dbm.open(CARDS_DB) as cards_db:
+        if not username in cards_db:
+            return None
+        info = json.loads(cards_db[username].decode())
+        return info['password']
+
 def select_card():
     cards = []
     with dbm.open(CARDS_DB) as cards_db:
@@ -81,12 +88,19 @@ def up(args):
         print("Looks like you're already connected. Use 'nauta down' to log out.")
         return
 
-    username, password = select_card()
-    if username is None:
-        print("No card available, add one with 'nauta cards add'")
-        return
+    if args.username:
+        username = args.username
+        password = get_password(username)
+        if password is None:
+            print("Invalid card: {}".format(args.username))
+            return
+    else:
+        username, password = select_card()
+        if username is None:
+            print("No card available, add one with 'nauta cards add'")
+            return
+        username = username.decode()
 
-    username = username.decode()
     tl = time_left(username)
     print("Using card {}. Time left: {}".format(username, tl))
     log("Connecting with card {}. Time left on card: {}".format(username, tl))
