@@ -317,10 +317,28 @@ def cards(args):
                 expire_date(card, args.fresh, args.cached)
             ))
 
+def verify(username, password):
+    session = requests.Session()
+    r = session.get("https://secure.etecsa.net:8443/")
+    soup = bs4.BeautifulSoup(r.text, 'html.parser')
+
+    form = get_inputs(soup)
+    action = "https://secure.etecsa.net:8443/EtecsaQueryServlet"
+    form['username'] = username
+    form['password'] = password
+    r = session.post(action, form)
+    soup = bs4.BeautifulSoup(r.text, 'html.parser')
+    exp_node = soup.find(string=re.compile("expiración"))
+    if not exp_node:
+        return False
+    return True
+
 def cards_add(args):
-    if not args.username:
-        username = input("Username: ")
+    username = args.username or input("Username: ")
     password = input("Password: ")
+    if not verify(username, password):
+        print("Credentials seem incorrect")
+        return
     with dbm.open(CARDS_DB, "c") as cards_db:
         cards_db[username] = json.dumps({
             'password': password,
