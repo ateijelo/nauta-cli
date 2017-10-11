@@ -355,7 +355,7 @@ def cards_clean(args):
     delete_cards(cards_to_purge)
 
 def cards_rm(args):
-    delete_cards(args.cards)
+    delete_cards(args.usernames)
 
 def cards_info(args):
     username = args.username
@@ -401,7 +401,7 @@ def main(args):
 
           up [username]
           down
-          cards [-v] [-f]
+          cards [-v] [-f] [-c]
           cards add [username]
           cards clean
           cards rm username [username ...]
@@ -412,6 +412,10 @@ def main(args):
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     subparsers = parser.add_subparsers()
+    parser.add_argument("-d", "--debug",
+        action="store_true",
+        help="show debug info"
+    )
 
     cards_parser = subparsers.add_parser('cards')
     cards_parser.set_defaults(func=cards)
@@ -422,6 +426,10 @@ def main(args):
     cards_parser.add_argument("-f", "--fresh",
         action="store_true",
         help="force a fresh request of card time"
+    )
+    cards_parser.add_argument("-c", "--cached",
+        action="store_true",
+        help="shows cached data, avoids the network"
     )
     cards_subparsers = cards_parser.add_subparsers()
     cards_add_parser = cards_subparsers.add_parser('add')
@@ -447,6 +455,12 @@ def main(args):
     down_parser.set_defaults(func=down)
 
     args = parser.parse_args()
+
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+        from http.client import HTTPConnection
+        HTTPConnection.debuglevel = 2
+
     if 'func' in args:
         args.func(args)
     else:
