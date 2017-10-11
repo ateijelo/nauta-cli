@@ -399,7 +399,7 @@ def main(args):
         epilog=dedent("""\
         Subcommands:
 
-          up
+          up [username]
           down
           cards [-v] [-f]
           cards add [username]
@@ -441,6 +441,7 @@ def main(args):
 
     up_parser = subparsers.add_parser('up')
     up_parser.set_defaults(func=up)
+    up_parser.add_argument('username', nargs="?")
 
     down_parser = subparsers.add_parser('down')
     down_parser.set_defaults(func=down)
