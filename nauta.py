@@ -253,34 +253,36 @@ def fetch_usertime(username):
     r = session.get("https://secure.etecsa.net:8443/EtecsaQueryServlet?op=getLeftTime&op1={}".format(username))
     return r.text
 
-def time_left(username, fresh=False):
+def time_left(username, fresh=False, cached=False):
     now = time.time()
     with dbm.open(CARDS_DB, "c") as cards_db:
         card_info = json.loads(cards_db[username].decode())
         last_update = card_info.get('last_update', 0)
         password = card_info['password']
-        if (now - last_update > 60) or fresh:
-            time_left = fetch_usertime(username)
-            last_update = time.time()
-            if re.match(r'[0-9:]+', time_left):
-                card_info['time_left'] = time_left
-                card_info['last_update'] = last_update
-                cards_db[username] = json.dumps(card_info)
+        if not cached:
+            if (now - last_update > 60) or fresh:
+                time_left = fetch_usertime(username)
+                last_update = time.time()
+                if re.match(r'[0-9:]+', time_left):
+                    card_info['time_left'] = time_left
+                    card_info['last_update'] = last_update
+                    cards_db[username] = json.dumps(card_info)
         time_left = card_info.get('time_left', '-')
         return time_left
 
-def expire_date(username, fresh=False):
+def expire_date(username, fresh=False, cached=False):
     # expire date computation won't depend on last_update
     # because the expire date will change very infrequently
     # in the case of rechargeable accounts and it will
     # never change in the case of non-rechargeable cards
     with dbm.open(CARDS_DB, "c") as cards_db:
         card_info = json.loads(cards_db[username].decode())
-        if (not 'expire_date' in card_info) or fresh:
-            password = card_info['password']
-            exp_date = fetch_expire_date(username, password)
-            card_info['expire_date'] = exp_date
-            cards_db[username] = json.dumps(card_info)
+        if not cached:
+            if (not 'expire_date' in card_info) or fresh:
+                password = card_info['password']
+                exp_date = fetch_expire_date(username, password)
+                card_info['expire_date'] = exp_date
+                cards_db[username] = json.dumps(card_info)
         exp_date = card_info['expire_date']
         return exp_date
 
@@ -311,8 +313,8 @@ def cards(args):
             print("{}\t{}\t{}\t(expires {})".format(
                 card,
                 password,
-                time_left(card, args.fresh),
-                expire_date(card, args.fresh)
+                time_left(card, args.fresh, args.cached),
+                expire_date(card, args.fresh, args.cached)
             ))
 
 def cards_add(args):
