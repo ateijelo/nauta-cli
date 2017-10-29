@@ -199,11 +199,9 @@ def up(args):
         except KeyboardInterrupt:
             print("Got a Ctrl+C, logging out...")
             log("Got Ctrl+C. Attempting disconnect...")
-            r = session.get(logout_url)
-            print(r.text)
+            down([])
 
             now = int(time.time())
-            log("Response to logout request: '{}'".format(r.text))
             log("Connection time:", human_secs(now - login_time))
 
             tl = time_left(username)
@@ -225,7 +223,13 @@ def down(args):
         return
     session = requests.Session()
     print("Logging out...")
-    r = session.get(logout_url)
+    for error_count in range(10):
+        try:
+            r = session.get(logout_url)
+            break
+        except requests.RequestException:
+            print("There was a problem logging out, retrying...")
+            continue
     print(r.text)
     if 'SUCCESS' in r.text:
         os.remove(LOGOUT_URL_FILE)
