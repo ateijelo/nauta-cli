@@ -13,6 +13,7 @@ import sys
 import dbm
 import os
 import re
+import getpass
 
 import logging
 
@@ -307,6 +308,7 @@ def delete_cards(cards):
                     break
 
 def cards(args):
+    entries = []
     with dbm.open(CARDS_DB, "c") as cards_db:
         for card in cards_db.keys():
             card = card.decode()
@@ -314,12 +316,15 @@ def cards(args):
             password = card_info['password']
             if not args.v:
                 password = "*" * (len(password) - 4) + password[-4:]
-            print("{}\t{}\t{}\t(expires {})".format(
-                card,
-                password,
-                time_left(card, args.fresh, args.cached),
-                expire_date(card, args.fresh, args.cached)
-            ))
+            entries.append((card, password))
+    
+    for card, password in entries:
+        print("{}\t{}\t{}\t(expires {})".format(
+            card,
+            password,
+            time_left(card, args.fresh, args.cached),
+            expire_date(card, args.fresh, args.cached)
+        ))
 
 def verify(username, password):
     session = requests.Session()
@@ -339,7 +344,7 @@ def verify(username, password):
 
 def cards_add(args):
     username = args.username or input("Username: ")
-    password = input("Password: ")
+    password = getpass.getpass("Password: ")
     if not verify(username, password):
         print("Credentials seem incorrect")
         return
