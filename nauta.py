@@ -464,6 +464,10 @@ def main(args):
     down_parser.set_defaults(func=down)
 
     args = parser.parse_args()
+    
+    if 'username' in args and '@' not in args.username:
+            # default domain is @nauta.com.cu
+            args.username += '@nauta.com.cu'
 
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
