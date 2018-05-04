@@ -315,7 +315,7 @@ def cards(args):
             card_info = json.loads(cards_db[card].decode())
             password = card_info['password']
             if not args.v:
-                password = "*" * (len(password) - 4) + password[-4:]
+                password = "*" * len(password)
             entries.append((card, password))
     
     for card, password in entries:
