@@ -254,7 +254,13 @@ def fetch_expire_date(username, password):
 
 def fetch_usertime(username):
     session = requests.Session()
-    r = session.get("https://secure.etecsa.net:8443/EtecsaQueryServlet?op=getLeftTime&op1={}".format(username))
+    try:
+        attribute_uuid = open(ATTR_UUID_FILE).read().strip()
+    except FileNotFoundError:
+        print("Connection seems to be down. To connect, use 'nauta up'")
+        return
+    r = session.get("https://secure.etecsa.net:8443/EtecsaQueryServlet?op=getLeftTime&username={}&ATTRIBUTE_UUID={}"
+                    .format(username, attribute_uuid))
     return r.text
 
 def time_left(username, fresh=False, cached=False):
