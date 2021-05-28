@@ -3,6 +3,9 @@
 from pprint import pprint
 from textwrap import dedent
 
+from threading import Thread
+from time import sleep
+
 import subprocess
 import requests
 import argparse
@@ -16,7 +19,11 @@ import re
 
 import logging
 
+sys.path.append('tools/')
+from check_time import *
+
 CONFIG_DIR = os.path.expanduser("~/.local/share/nauta/")
+
 try:
     os.makedirs(CONFIG_DIR)
 except FileExistsError:
@@ -27,12 +34,11 @@ LOGOUT_URL_FILE = os.path.join(CONFIG_DIR, "logout_url")
 logfile = open(os.path.join(CONFIG_DIR, "connections.log"), "a")
 
 def log(*args, **kwargs):
-    date = subprocess.check_output("date").decode().strip()
     kwargs.update(dict(file=logfile))
     print(
         "{:.3f} ({})".format(
             time.time(),
-            date,
+            'date',
         ),
         *args,
         **kwargs,
@@ -77,7 +83,12 @@ def select_card():
         return None, None
     return cards[0]['username'], cards[0]['password']
 
+
 def up(args):
+
+    if args.time:
+        print("You have selected to shutdown your connection in:", args.time, "seconds")
+
     session = requests.Session()
     r = session.get("http://google.com")
 
@@ -196,6 +207,11 @@ def up(args):
                 time.sleep(1)
                 if not os.path.exists(LOGOUT_URL_FILE):
                     break
+
+                if args.time:
+                    if (check_time(int(time.time()), login_time, args.time)) == True:
+                        down([])
+
         except KeyboardInterrupt:
             print("Got a Ctrl+C, logging out...")
             log("Got Ctrl+C. Attempting disconnect...")
@@ -450,16 +466,20 @@ def main(args):
     cards_info_parser = cards_subparsers.add_parser('info')
     cards_info_parser.set_defaults(func=cards_info)
     cards_info_parser.add_argument('username')
-
+    
     up_parser = subparsers.add_parser('up')
     up_parser.set_defaults(func=up)
     up_parser.add_argument('username', nargs="?")
+    up_parser.add_argument('--time', '-t', type=int)
+    # up_parser.add_argument("-t", "--time", type=int,
+    #     help="the ammount of time (in seconds) for the conection to be alive"
+    # )
 
     down_parser = subparsers.add_parser('down')
     down_parser.set_defaults(func=down)
 
     args = parser.parse_args()
-
+    
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
         from http.client import HTTPConnection
