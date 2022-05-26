@@ -254,25 +254,34 @@ def fetch_expire_date(username, password):
 
 def fetch_usertime(username):
     session = requests.Session()
-    r = session.get("https://secure.etecsa.net:8443/EtecsaQueryServlet?op=getLeftTime&op1={}".format(username))
+    try:
+        attribute_uuid = open(ATTR_UUID_FILE).read().strip()
+    except FileNotFoundError:
+        print("Connection seems to be down. To connect, use 'nauta up'")
+        return
+    r = session.get("https://secure.etecsa.net:8443/EtecsaQueryServlet?op=getLeftTime&username={}&ATTRIBUTE_UUID={}"
+                    .format(username, attribute_uuid))
     return r.text
 
 def time_left(username, fresh=False, cached=False):
     now = time.time()
-    with dbm.open(CARDS_DB, "c") as cards_db:
-        card_info = json.loads(cards_db[username].decode())
-        last_update = card_info.get('last_update', 0)
-        password = card_info['password']
-        if not cached:
-            if (now - last_update > 60) or fresh:
-                time_left = fetch_usertime(username)
-                last_update = time.time()
-                if re.match(r'[0-9:]+', time_left):
-                    card_info['time_left'] = time_left
-                    card_info['last_update'] = last_update
-                    cards_db[username] = json.dumps(card_info)
-        time_left = card_info.get('time_left', '-')
-        return time_left
+    try:
+        with dbm.open(CARDS_DB, "c") as cards_db:
+            card_info = json.loads(cards_db[username].decode())
+            last_update = card_info.get('last_update', 0)
+            password = card_info['password']
+            if not cached:
+                if (now - last_update > 60) or fresh:
+                    time_left = fetch_usertime(username)
+                    last_update = time.time()
+                    if re.match(r'[0-9:]+', time_left):
+                        card_info['time_left'] = time_left
+                        card_info['last_update'] = last_update
+                        cards_db[username] = json.dumps(card_info)
+            time_left = card_info.get('time_left', '-')
+            return time_left
+    except:
+        return '-'
 
 def expire_date(username, fresh=False, cached=False):
     # expire date computation won't depend on last_update
